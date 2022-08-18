@@ -32,14 +32,22 @@ def uploadToGap(path):
         return data["data"]["SID"]
 
 
+def gapSendMessage(chatId, text):
+    url = 'https://api.gap.im/sendMessage'
+    header = {'token': os.getenv("GAP_BOT_TOKEN")}
+    data = {'chat_id': int(chatId), "type": "text", "data": text}
+    x = requests.post(url, data=data, headers=header)
+    return x.text
+
+
 @app.route('/')
-def t():
+def index():
     return "Hi :)"
 
 
 @app.route('/gapBot', methods=['POST'])
-def t():
-    return request.form
+def gapBot():
+    return gapSendMessage(request.form.get("chat_id"), request.form.get("data"))
 
 
 @app.route('/tel', methods=['GET'])
