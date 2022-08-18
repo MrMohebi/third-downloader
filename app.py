@@ -3,6 +3,7 @@ from pySmartDL import SmartDL
 from dotenv import load_dotenv
 import requests
 import os
+import threading
 
 load_dotenv()
 app = Flask(__name__)
@@ -40,19 +41,7 @@ def gapSendMessage(chatId, text):
     return x.text
 
 
-@app.route('/')
-def index():
-    return "Hi :)"
-
-
-@app.route('/gapBot', methods=['POST'])
-def gapBot():
-    return gapSendMessage(request.form.get("chat_id"), request.form.get("data"))
-
-
-@app.route('/tel', methods=['GET'])
-def getLink():
-    link = request.args.get('link')
+def getFinalDownloadLink(link):
     dis = "~/pyDL/"
     downloader = SmartDL(link, dis, progress_bar=False)
     downloader.start()
@@ -61,8 +50,37 @@ def getLink():
     finalUrl = "https://cdn.gaplication.com/o/" + urlPart
     # remove file from server
     os.remove(path)
+    return finalUrl
+
+
+def downloadAndSendToTel(link):
+    finalUrl = getFinalDownloadLink(link)
     sendLinkTelegram(finalUrl)
     return finalUrl
+
+@app.route('/')
+def index():
+    return "Hi :)"
+
+
+@app.route('/gapBot', methods=['POST'])
+def gapBot():
+    messageType = request.form.get("type")
+    chatId = request.form.get("chat_id")
+    data = request.form.get("data")
+
+    if messageType == 'text' and data[:4] == 'http':
+        thr = threading.Thread(target=downloadAndSendToTel, args=(data,), kwargs={})
+        thr.start()
+        return gapSendMessage(chatId, "Add to list, result will be sent to Telegram.")
+
+    return gapSendMessage(chatId, data)
+
+
+@app.route('/tel', methods=['GET'])
+def getLink():
+    link = request.args.get('link')
+    return downloadAndSendToTel(link)
 
 
 if __name__ == '__main__':
