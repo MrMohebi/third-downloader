@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import requests
 import os
 import threading
+from requests_toolbelt.multipart.encoder import MultipartEncoder
 
 load_dotenv()
 app = Flask(__name__)
@@ -26,11 +27,20 @@ def sendLinkTelegram(link):
 
 
 def uploadToGap(path):
+    session = requests.Session()
     with open(path, 'rb') as f:
-        files = {'file': f}
-        r = requests.post(getGapUploadUrl(), files=files)
-        data = r.json()
-        return data["data"]["SID"]
+        try:
+            m = MultipartEncoder(fields={'file': (path.split("/")[-1], f, 'application/octet-stream'),"composite": "NONE"})
+            headers = {'Content-Type': m.content_type}
+            print('start to uploading =>'+path, flush=True)
+            r = requests.post(getGapUploadUrl(), data=m, headers=headers)
+            print('uploaded to gap =>'+path, flush=True)
+            data = r.json()
+            return data["data"]["SID"]
+        except Exception as e:
+            print("error in uploading gap =>" + path, flush=True)
+            print(e, flush=True)
+    session.close()
 
 
 def gapSendMessage(chatId, text):
@@ -46,6 +56,8 @@ def getFinalDownloadLink(link):
     downloader = SmartDL(link, dis, progress_bar=False)
     downloader.start()
     path = downloader.get_dest()
+    print("downloaded =>" + link, flush=True)
+    print("file =>" + path, flush=True)
     urlPart = uploadToGap(path)
     finalUrl = "https://cdn.gaplication.com/o/" + urlPart
     # remove file from server
@@ -57,6 +69,13 @@ def downloadAndSendToTel(link):
     finalUrl = getFinalDownloadLink(link)
     sendLinkTelegram(finalUrl)
     return finalUrl
+
+
+def downloadAndSendToGap(link,chatId):
+    finalUrl = getFinalDownloadLink(link)
+    gapSendMessage(chatId, finalUrl)
+    return finalUrl
+
 
 @app.route('/')
 def index():
@@ -70,9 +89,9 @@ def gapBot():
     data = request.form.get("data")
 
     if messageType == 'text' and data[:4] == 'http':
-        thr = threading.Thread(target=downloadAndSendToTel, args=(data,), kwargs={})
+        thr = threading.Thread(target=downloadAndSendToGap, args=(data,chatId,), kwargs={})
         thr.start()
-        return gapSendMessage(chatId, "Add to list, result will be sent to Telegram.")
+        return gapSendMessage(chatId, "Add to list, result will be sent here.")
 
     return gapSendMessage(chatId, data)
 
